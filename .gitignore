@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets
+.env
+*.key
+*-key.json
+credentials*.json
+
+# Data (too big / not ours to publish)
+data/
+*.csv
+*.zip
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Planning docs, config records and artifacts (local only)
+*.md
+!README.md
+artifacts/
