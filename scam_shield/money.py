@@ -2,8 +2,8 @@
 
 Pure logic only. The BigQuery lookup lives in money_repo.py.
 Score = profile rules (explainable), boosted by the BigQuery ML model.
-The model is trained on PaySim, where fraud is mostly "empty the whole account", so it is
-good at that one pattern and blind to others. It may therefore only raise the score.
+The model is a logistic regression on PaySim (share of balance + night-time). Its signal is
+modest (AUC ~0.69 on unseen days, mostly "night-time"), so it may only raise the score.
 """
 
 import math

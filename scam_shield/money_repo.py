@@ -49,10 +49,8 @@ CROSS JOIN ML.PREDICT(
   MODEL `{ds}.money_model`,
   (
     SELECT
-      @amount AS amount,
-      IF(balance_inr > 0, LEAST(@amount / balance_inr, 10), NULL) AS share_of_balance,
-      CAST(balance_inr > 0 AND @amount >= balance_inr AS INT64) AS drains_account,
-      @hour AS hour_of_day
+      IF(balance_inr > 0, ROUND(LEAST(@amount / balance_inr, 1), 1), 1.0) AS share_band,
+      CAST(@hour BETWEEN 0 AND 6 AS INT64) AS is_night
     FROM facts
   )
 ) AS pred
