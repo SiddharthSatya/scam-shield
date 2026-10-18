@@ -8,6 +8,7 @@ import base64
 import binascii
 import hmac
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -46,7 +47,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="Scam Shield", version="0.1.0", lifespan=lifespan)
+# API docs (/docs, /redoc, /openapi.json) are off by default so the public URL doesn't
+# reveal the API's shape. Set ENABLE_DOCS=true locally to browse them. Read straight from
+# the environment because the app object is built at import time, before Settings load.
+_DOCS = os.getenv("ENABLE_DOCS", "false").lower() == "true"
+
+app = FastAPI(
+    title="Scam Shield",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _DOCS else None,
+    redoc_url="/redoc" if _DOCS else None,
+    openapi_url="/openapi.json" if _DOCS else None,
+)
 
 
 # ---------- Dependencies ----------

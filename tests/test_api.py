@@ -79,6 +79,11 @@ def test_health_needs_no_key(client):
     assert client.get("/health").json() == {"status": "ok"}
 
 
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
+def test_api_docs_are_off_by_default(client, path):
+    assert client.get(path).status_code == 404
+
+
 def test_missing_api_key_rejected(client, monkeypatch):
     stub_money(monkeypatch, money_inputs(1_200, 11, False, 3_000))
     r = client.post("/v1/check-payment", json={
