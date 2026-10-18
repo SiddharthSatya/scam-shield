@@ -18,7 +18,7 @@ QUERY_TIMEOUT_S = 10.0
 
 _FACTS_CTE = """
 WITH cust AS (
-  SELECT customer_id, balance_inr FROM `{ds}.customers` WHERE customer_id = @customer_id
+  SELECT customer_id, balance_inr, language FROM `{ds}.customers` WHERE customer_id = @customer_id
 ),
 prof AS (
   SELECT * FROM `{ds}.customer_profile` WHERE customer_id = @customer_id
@@ -26,6 +26,7 @@ prof AS (
 facts AS (
   SELECT
     cust.balance_inr,
+    cust.language,
     prof.p95_amount_inr,
     prof.usual_from_hour,
     prof.usual_to_hour,
@@ -65,6 +66,7 @@ class CustomerNotFound(LookupError):
 class MoneyInputs:
     facts: PaymentFacts
     model_probability: float | None
+    language: str
 
 
 def fetch_money_inputs(
@@ -101,7 +103,11 @@ def fetch_money_inputs(
         usual_from_hour=row["usual_from_hour"],
         usual_to_hour=row["usual_to_hour"],
     )
-    return MoneyInputs(facts=facts, model_probability=row["model_probability"])
+    return MoneyInputs(
+        facts=facts,
+        model_probability=row["model_probability"],
+        language=row["language"] or "en",
+    )
 
 
 def _query_one(

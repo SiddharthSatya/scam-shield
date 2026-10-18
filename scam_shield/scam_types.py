@@ -40,3 +40,13 @@ DESCRIPTIONS: dict[ScamType, str] = {
         "invoices, normal bank notifications that say never share OTP."
     ),
 }
+
+# Name shown to the customer.
+DISPLAY_NAMES: dict[ScamType, str] = {
+    ScamType.DIGITAL_ARREST: "Digital arrest scam",
+    ScamType.KYC_UPDATE: "Fake KYC update scam",
+    ScamType.JOB_TASK: "Job / task scam",
+    ScamType.FAKE_COURIER: "Fake courier scam",
+    ScamType.INVESTMENT: "Investment scam",
+    ScamType.NONE: "No scam detected",
+}

@@ -29,6 +29,16 @@ class Purpose(StrEnum):
     SOMEONE_ASKED = "someone_asked"
 
 
+# Customer-facing labels (also what Gemini sees, so it never echoes raw codes).
+PURPOSE_LABELS: dict[Purpose, str] = {
+    Purpose.FAMILY: "Family / friend",
+    Purpose.SHOPPING_BILL: "Shopping / bill",
+    Purpose.INVESTMENT: "Investment / trading",
+    Purpose.GOVT_POLICE_KYC: "Govt / police / KYC / tax",
+    Purpose.JOB_TASK_REWARD: "Job / task / reward",
+    Purpose.SOMEONE_ASKED: "Someone asked me to pay",
+}
+
 # How suspicious each tap is on its own (used for the floor and the fallback).
 PURPOSE_RISK: dict[Purpose, float] = {
     Purpose.FAMILY: 0.1,
@@ -43,6 +53,7 @@ PURPOSE_TO_SCAM: dict[Purpose, ScamType] = {
     Purpose.GOVT_POLICE_KYC: ScamType.DIGITAL_ARREST,
     Purpose.JOB_TASK_REWARD: ScamType.JOB_TASK,
 }
+MAX_OUTPUT_TOKENS = 1_024
 ON_CALL_RISK = 0.3
 SECRECY_RISK = 0.3
 
@@ -111,7 +122,9 @@ Rules:
 - Judge the whole story: answers + message. If there is no message, judge the answers.
 - Being on a call while paying, or being told to keep it secret or hurry, are strong scam signs.
 - Genuine cases (family, bills, purchases with real invoices, normal bank alerts) score low.
-- red_flags: short phrases naming what gave it away. Empty list if genuine.
+- red_flags: 2-4 short phrases in {language} naming what is suspicious in the story,
+  e.g. "Threat of arrest", "Asked to move money to a 'safe account'", "Told to keep it secret".
+  Describe the warning sign itself; never repeat the question or answer labels. Empty if genuine.
 - explanation: write for a worried, non-technical person, in {language}. 2-3 short sentences.
   If it is a scam, name the scam in simple words and say what real banks/police never do.
 - Never ask the customer for passwords, PINs or OTPs.
@@ -120,7 +133,7 @@ Rules:
 
 def _build_prompt(ctx: ContextInput) -> str:
     answers = [
-        f"Purpose of payment: {ctx.purpose.value if ctx.purpose else 'not answered'}",
+        f"Purpose of payment: {PURPOSE_LABELS[ctx.purpose] if ctx.purpose else 'not answered'}",
         f"On a call with someone right now: {_yes_no(ctx.on_call)}",
         f"Told to keep it secret or act fast: {_yes_no(ctx.told_to_keep_secret)}",
         f"Message shared: {ctx.message_text!r}" if ctx.message_text else "Message shared: none",
@@ -153,6 +166,10 @@ def read_context(ctx: ContextInput, client: genai.Client, model: str) -> Context
                 response_mime_type="application/json",
                 response_schema=ContextVerdict,
                 temperature=0.0,
+                # Cap output: in Hindi/Marathi, gemini-2.5-flash sometimes loops on
+                # \uXXXX escapes until the deadline. A capped, looped reply fails to
+                # parse and falls back fast instead of hanging.
+                max_output_tokens=MAX_OUTPUT_TOKENS,
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )

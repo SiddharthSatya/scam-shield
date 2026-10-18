@@ -1,0 +1,7 @@
+# Upload only what the image needs. Never upload .env, data/ or docs.
+*
+!Dockerfile
+!requirements.txt
+!scam_shield/
+!scam_shield/**
+scam_shield/**/__pycache__/

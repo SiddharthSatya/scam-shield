@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +12,19 @@ class Settings(BaseSettings):
     gcp_project: str
     gcp_region: str = "us-central1"
     bq_dataset: str = "scam_shield"
-    gemini_model: str = "gemini-2.5-flash"
+    # flash-lite: 10/10 valid replies in Hindi/Marathi at ~1.2 s; 2.5-flash (no thinking)
+    # looped on non-English output 7/10 times. See HANDOVER.md "Gotchas".
+    gemini_model: str = "gemini-2.5-flash-lite"
+
+    # Decision thresholds (see CONFIG.md for why these values).
+    ask_threshold: float = 0.40  # money score at which we ask for context
+    hold_threshold: float = 0.70  # combined score at which we hold the payment
+    cooling_off_threshold: float = 0.90  # money score alone that triggers a cooling-off
+
+    # Security. Both must be set; never commit real values.
+    api_key: SecretStr  # shared with the bank backend, sent as X-API-Key
+    token_secret: SecretStr  # signs the check token between /check-payment and /context
+    token_ttl_seconds: int = 600
 
     def table(self, name: str) -> str:
         """Fully qualified BigQuery table id, e.g. project.dataset.table."""
