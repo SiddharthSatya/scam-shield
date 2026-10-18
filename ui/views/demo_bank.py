@@ -162,10 +162,13 @@ def _payment_form(customer) -> None:
     if S.get("payee_id") not in labels:
         S["payee_id"] = payees.payee_id.iloc[0]
     st.selectbox("Pay to", list(labels), format_func=labels.get, key="payee_id")
-    S.setdefault("amount", 1_000.0)
+    balance = float(customer.balance_inr)
+    # A bank app never lets you send more than you have. Clamp first: a scenario or a
+    # previous customer may have left a bigger amount in state.
+    S["amount"] = min(S.get("amount", 1_000.0), balance)
     S.setdefault("hour", 11)
-    st.number_input("Amount (₹)", min_value=1.0, max_value=10_000_000.0, step=500.0,
-                    key="amount", format="%.0f")
+    st.number_input(f"Amount (₹) · available {inr(balance)}", min_value=1.0, max_value=balance,
+                    step=500.0, key="amount", format="%.0f")
     st.slider("Time of payment (IST, for the demo)", 0, 23, key="hour",
               format="%d:00")
     if st.button(f"Pay {inr(S['amount'])}", type="primary", width="stretch"):
