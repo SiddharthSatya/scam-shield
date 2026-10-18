@@ -169,6 +169,21 @@ def submit_context(
     )
 
 
+class OutcomeRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=4_000)
+    action: service.CustomerAction
+
+
+@app.post("/v1/outcome", dependencies=Auth, status_code=204)
+def record_outcome(req: OutcomeRequest, deps: DepsDep, background: BackgroundTasks) -> None:
+    """What the customer did after a warning. Feeds the dashboard's "money protected"."""
+    try:
+        row = service.record_outcome(deps, req.token, req.action)
+    except tokens.InvalidToken as e:
+        raise HTTPException(status_code=400, detail=f"Invalid check token: {e}") from e
+    background.add_task(service.write_log, deps.bq, deps.settings.table("decisions"), row)
+
+
 def _decode_image(data: str | None) -> bytes | None:
     if not data:
         return None

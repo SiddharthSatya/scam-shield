@@ -201,3 +201,24 @@ def test_log_failure_does_not_break_the_response(client, bq, monkeypatch):
     stub_money(monkeypatch, money_inputs(1_200, 11, False, 3_000))
     bq.insert_rows_json.side_effect = RuntimeError("BigQuery down")
     assert pay(client, amount=1_200, hour=11).status_code == 200
+
+
+def test_outcome_is_logged_with_payment_details(client, bq, monkeypatch):
+    stub_money(monkeypatch, money_inputs(480_000, 21, True, 2))
+    token = pay(client).json()["token"]
+    bq.insert_rows_json.reset_mock()
+    r = client.post("/v1/outcome", headers=HEADERS,
+                    json={"token": token, "action": "cancel_payment"})
+    assert r.status_code == 204
+    row = bq.insert_rows_json.call_args.args[1][0]
+    assert row["stage"] == "outcome"
+    assert row["decision"] == "cancel_payment"
+    assert row["amount_inr"] == 480_000
+
+
+def test_outcome_rejects_unknown_action_and_bad_token(client):
+    r = client.post("/v1/outcome", headers=HEADERS, json={"token": "x" * 20, "action": "steal"})
+    assert r.status_code == 422
+    r = client.post("/v1/outcome", headers=HEADERS,
+                    json={"token": "forged.token-value", "action": "cancel_payment"})
+    assert r.status_code == 400

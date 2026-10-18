@@ -4,6 +4,9 @@ db-dtypes==1.8.0
 Faker==40.43.0
 pandas==3.0.6
 pyarrow==26.0.0
+# UI
+streamlit==1.66.0
+pillow==12.3.0
 # Tests and lint
 httpx==0.28.1
 pytest==9.1.1

@@ -1,9 +1,11 @@
 """End-to-end check of the running API on the 5 demo scenarios (real BigQuery + Gemini).
 
 Usage: python -m scripts.smoke_api [base_url]   (default http://localhost:8080)
+For the IAM-private Cloud Run API, also sends a Google ID token from `gcloud`.
 Exits non-zero if any scenario gets an unexpected decision.
 """
 
+import subprocess
 import sys
 import time
 
@@ -36,6 +38,10 @@ TAPS = {
 
 def main(base_url: str) -> int:
     headers = {"X-API-Key": get_settings().api_key.get_secret_value()}
+    if base_url.startswith("https://"):
+        token = subprocess.run(["gcloud", "auth", "print-identity-token"], capture_output=True,
+                               text=True, check=True).stdout.strip()
+        headers["Authorization"] = f"Bearer {token}"
     failures = 0
     with httpx.Client(base_url=base_url, headers=headers, timeout=60) as http:
         for s in demo_scenarios():

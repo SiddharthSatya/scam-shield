@@ -7,6 +7,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from google import genai
@@ -114,9 +115,23 @@ def submit_context(deps: Deps, token: str, ctx: ContextInput) -> tuple[FinalStep
     return step, row
 
 
+class CustomerAction(StrEnum):
+    """What the customer chose on a warning or cooling-off screen."""
+    CANCEL_PAYMENT = "cancel_payment"
+    CONTINUE_ANYWAY = "continue_anyway"
+    CALL_BANK = "call_bank"
+
+
+def record_outcome(deps: Deps, token: str, action: CustomerAction) -> dict[str, Any]:
+    """Step 3 (optional). Returns a log row. Raises tokens.InvalidToken on a bad token."""
+    p = tokens.verify(token, deps.settings.token_secret.get_secret_value())
+    return _log_row(p["check_id"], "outcome", p["customer_id"], p["payee_id"], p["amount_inr"],
+                    p["hour_ist"], action, p["money_score"], p["reasons"])
+
+
 def _log_row(
     check_id: str, stage: str, customer_id: str, payee_id: str, amount_inr: float,
-    hour_ist: int, decision: Decision, money: float, reasons: list[str],
+    hour_ist: int, decision: Decision | CustomerAction, money: float, reasons: list[str],
     context: ContextResult | None = None, combined: float | None = None,
 ) -> dict[str, Any]:
     return {
