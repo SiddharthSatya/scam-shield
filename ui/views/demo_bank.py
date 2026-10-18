@@ -113,7 +113,7 @@ def choose(action: str) -> None:
 # ---------- Page ----------
 
 def page() -> None:
-    st.title("🏦 Demo Bank")
+    st.title("Scam Shield")
     st.caption("A pretend banking app. Before every payment, it asks Scam Shield. "
                "In real life, any bank adds this with one API call and one screen.")
 
