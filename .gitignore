@@ -2,6 +2,7 @@
 .venv/
 __pycache__/
 *.pyc
+wiki/
 
 # Secrets
 .env
@@ -19,7 +20,10 @@ data/
 .vscode/
 .idea/
 
-# Planning docs, config records and artifacts (local only)
+# Planning docs, decks, config records and artifacts (local only)
+*.pptx
+*.key
+*.pdf
 *.md
 !README.md
 artifacts/

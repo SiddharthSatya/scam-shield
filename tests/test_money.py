@@ -67,8 +67,9 @@ def test_full_balance_counts_as_draining():
     assert signals["balance_share"] == 1.0
 
 
-def test_zero_balance_does_not_divide_by_zero():
-    assert facts(balance_inr=0).share_of_balance == 1.0
+def test_zero_balance_cannot_pay_anything():
+    with pytest.raises(ValueError):
+        facts(balance_inr=0)
 
 
 @pytest.mark.parametrize("bad", [{"amount_inr": 0}, {"amount_inr": -5}, {"hour_ist": 24}])
@@ -78,7 +79,7 @@ def test_invalid_input_rejected(bad):
 
 
 def test_score_is_bounded():
-    f = facts(amount_inr=10_000_000, balance_inr=1, hour_ist=3, is_new_payee=True,
+    f = facts(amount_inr=10_000_000, balance_inr=10_000_000, hour_ist=3, is_new_payee=True,
               payee_account_age_days=0)
     assert money_score(f, model_probability=5.0).score <= 1.0
 

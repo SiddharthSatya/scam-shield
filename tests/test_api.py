@@ -39,8 +39,21 @@ def gemini() -> MagicMock:
 
 @pytest.fixture
 def bq() -> MagicMock:
+    """BigQuery mock that remembers logged rows, so the replay check sees earlier steps."""
     client = MagicMock()
-    client.insert_rows_json.return_value = []
+    client.logged_rows = []
+
+    def insert(table_id, rows):
+        client.logged_rows.extend(rows)
+        return []
+
+    def query(sql, job_config=None, **kwargs):
+        check_id = job_config.query_parameters[0].value
+        return [{"found": 1} for r in client.logged_rows
+                if r["check_id"] == check_id and r["stage"] == "final"][:1]
+
+    client.insert_rows_json.side_effect = insert
+    client.query_and_wait.side_effect = query
     return client
 
 
@@ -222,3 +235,26 @@ def test_outcome_rejects_unknown_action_and_bad_token(client):
     r = client.post("/v1/outcome", headers=HEADERS,
                     json={"token": "forged.token-value", "action": "cancel_payment"})
     assert r.status_code == 400
+
+
+def test_context_is_single_use(client, gemini, monkeypatch):
+    stub_money(monkeypatch, money_inputs(480_000, 21, True, 2))
+    token = pay(client).json()["token"]
+    gemini.models.generate_content.side_effect = TimeoutError()
+    scam = {"token": token, "purpose": "govt_police_kyc", "on_call": True,
+            "told_to_keep_secret": True}
+    assert client.post("/v1/context", headers=HEADERS, json=scam).json()["decision"] == "hold"
+    soft = {"token": token, "purpose": "family", "on_call": False, "told_to_keep_secret": False}
+    assert client.post("/v1/context", headers=HEADERS, json=soft).status_code == 409
+    # The outcome step still works after the final decision.
+    assert client.post("/v1/outcome", headers=HEADERS,
+                       json={"token": token, "action": "cancel_payment"}).status_code == 204
+
+
+def test_replay_check_fails_open_when_log_is_down(client, bq, gemini, monkeypatch):
+    stub_money(monkeypatch, money_inputs(480_000, 21, True, 2))
+    token = pay(client).json()["token"]
+    bq.query_and_wait.side_effect = RuntimeError("BigQuery down")
+    gemini.models.generate_content.side_effect = TimeoutError()
+    r = client.post("/v1/context", headers=HEADERS, json={"token": token, "purpose": "family"})
+    assert r.status_code == 200

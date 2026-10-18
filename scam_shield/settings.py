@@ -20,10 +20,13 @@ class Settings(BaseSettings):
     ask_threshold: float = 0.40  # money score at which we ask for context
     hold_threshold: float = 0.70  # combined score at which we hold the payment
     cooling_off_threshold: float = 0.90  # money score alone that triggers a cooling-off
+    context_hold_threshold: float = 0.85  # context score alone that triggers a hold
 
     # Security. Both must be set; never commit real values.
     api_key: SecretStr  # shared with the bank backend, sent as X-API-Key
     token_secret: SecretStr  # signs the check token between /check-payment and /context
+    # Covers safety check -> warning -> outcome while a person reads and taps.
+    # Replay is blocked separately: /context is single-use per check (see service.py).
     token_ttl_seconds: int = 600
 
     def table(self, name: str) -> str:

@@ -16,6 +16,8 @@ from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from google.cloud import bigquery
 from pydantic import BaseModel, Field
 
@@ -23,7 +25,7 @@ from scam_shield import service, tokens
 from scam_shield.context import ContextInput, Purpose
 from scam_shield.decision import Decision
 from scam_shield.gemini import get_client as get_gemini_client
-from scam_shield.money_repo import CustomerNotFound
+from scam_shield.money_repo import AmountExceedsBalance, CustomerNotFound
 from scam_shield.scam_types import DISPLAY_NAMES, ScamType
 from scam_shield.screens import Screen
 from scam_shield.settings import get_settings
@@ -62,6 +64,15 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """422 without echoing input values: they may hold customer data, and values like
+    1e999 (infinity) can't even be serialised back to JSON."""
+    errors = [{"loc": list(e.get("loc", ())), "msg": e.get("msg", ""), "type": e.get("type", "")}
+              for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": errors})
+
+
 # ---------- Dependencies ----------
 
 def get_deps(request: Request) -> service.Deps:
@@ -73,7 +84,8 @@ def require_api_key(
     x_api_key: Annotated[str | None, Header()] = None,
 ) -> None:
     expected = deps.settings.api_key.get_secret_value()
-    if not x_api_key or not hmac.compare_digest(x_api_key, expected):
+    # Compare bytes: compare_digest raises TypeError on non-ASCII str input.
+    if not x_api_key or not hmac.compare_digest(x_api_key.encode(), expected.encode()):
         raise HTTPException(status_code=401, detail="Missing or invalid API key")
 
 
@@ -86,7 +98,7 @@ Auth = [Depends(require_api_key)]
 class CheckPaymentRequest(BaseModel):
     customer_id: str = Field(min_length=3, max_length=64)
     payee_id: str = Field(min_length=3, max_length=64)
-    amount_inr: float = Field(gt=0, le=100_000_000)
+    amount_inr: float = Field(gt=0, le=100_000_000, allow_inf_nan=False)
     hour_ist: int | None = Field(default=None, ge=0, le=23, description="Defaults to now (IST)")
 
 
@@ -140,6 +152,9 @@ def check_payment(
                                           req.amount_inr, hour)
     except CustomerNotFound as e:
         raise HTTPException(status_code=404, detail="Unknown customer") from e
+    except AmountExceedsBalance as e:
+        raise HTTPException(status_code=422,
+                            detail="Amount is more than the available balance") from e
     background.add_task(service.write_log, deps.bq, deps.settings.table("decisions"), row)
     return CheckPaymentResponse(check_id=step.check_id, decision=step.decision,
                                 money_score=step.money_score, reasons=step.reasons,
@@ -159,6 +174,8 @@ def submit_context(
         step, row = service.submit_context(deps, req.token, ctx)
     except tokens.InvalidToken as e:
         raise HTTPException(status_code=400, detail=f"Invalid check token: {e}") from e
+    except service.AlreadyDecided as e:
+        raise HTTPException(status_code=409, detail="This payment check is already decided") from e
     background.add_task(service.write_log, deps.bq, deps.settings.table("decisions"), row)
     c = step.context
     return ContextResponse(

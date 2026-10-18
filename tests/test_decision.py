@@ -50,3 +50,8 @@ def test_combined_score_is_average():
 def test_bad_thresholds_rejected():
     with pytest.raises(ValueError):
         Thresholds(ask=0.8, hold=0.5, cooling_off=0.9)
+
+
+def test_context_hold_threshold_validated():
+    with pytest.raises(ValueError):
+        Thresholds(ask=0.4, hold=0.7, cooling_off=0.9, context_hold=1.2)

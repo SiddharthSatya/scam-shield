@@ -27,7 +27,7 @@ def client() -> ScamShieldClient:
 
 
 def reset_flow() -> None:
-    for k in ("stage", "check", "final", "message", "timings"):
+    for k in ("stage", "check", "final", "message", "timings"):  # not "error": shown once
         S.pop(k, None)
     S["flow_id"] = S.get("flow_id", 0) + 1  # fresh widget keys for the next payment
 
@@ -50,12 +50,15 @@ def on_customer_change() -> None:
     reset_flow()
 
 
-def pay(customer_id: str, payee_id: str, amount: float, hour: int) -> None:
+def pay(customer_id: str, payee_id: str, amount: float, hour: int, balance: float) -> None:
+    if not 0 < amount <= balance:
+        S["error"] = f"Enter an amount between {inr(1)} and {inr(balance)}."
+        return
     start = time.perf_counter()
     try:
         check = client().check_payment(customer_id, payee_id, amount, hour)
     except ApiError as e:
-        st.error(str(e))
+        S["error"] = f"Couldn't check this payment, please try again. ({e})"
         return
     S["timings"] = {"money_s": time.perf_counter() - start}
     S["check"] = check
@@ -82,7 +85,11 @@ def send_context(answers: render.Answers) -> None:
     try:
         final = client().submit_context(payload)
     except ApiError as e:
-        st.error(str(e))
+        if e.status in (400, 409):  # check expired or already decided: start again
+            S["error"] = "This safety check has ended. Please make the payment again."
+            reset_flow()
+        else:  # network or server problem: keep the answers screen so they can retry
+            S["error"] = f"Couldn't reach Scam Shield, please try again. ({e})"
         return
     S["timings"]["context_s"] = time.perf_counter() - start
     S["final"] = final
@@ -118,6 +125,9 @@ def page() -> None:
     phone, backstage = st.columns([3, 2], gap="large")
     with phone, st.container(border=True):
         customer = _customer_picker(customers)
+        # Errors are kept in state: callers rerun right after, which would wipe st.error.
+        if S.get("error"):
+            st.error(S.pop("error"))
         stage = S.get("stage", "form")
         if stage == "form":
             _payment_form(customer)
@@ -173,7 +183,7 @@ def _payment_form(customer) -> None:
               format="%d:00")
     if st.button(f"Pay {inr(S['amount'])}", type="primary", width="stretch"):
         with st.spinner("Checking with Scam Shield..."):
-            pay(customer.name, S["payee_id"], S["amount"], S["hour"])
+            pay(customer.name, S["payee_id"], S["amount"], S["hour"], balance)
         st.rerun()
 
 

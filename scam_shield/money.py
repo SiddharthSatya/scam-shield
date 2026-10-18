@@ -37,8 +37,10 @@ class PaymentFacts:
     usual_to_hour: int | None = None
 
     def __post_init__(self) -> None:
-        if self.amount_inr <= 0:
-            raise ValueError("amount_inr must be positive")
+        if not math.isfinite(self.amount_inr) or self.amount_inr <= 0:
+            raise ValueError("amount_inr must be a positive, finite number")
+        if self.amount_inr > self.balance_inr:
+            raise ValueError("amount_inr cannot exceed the account balance")
         if not 0 <= self.hour_ist <= 23:
             raise ValueError("hour_ist must be 0..23")
 
@@ -72,6 +74,11 @@ def _days(n: int | None) -> str:
     return f"{n} day" if n == 1 else f"{n} days"
 
 
+def _in_window(hour: int, start: int, end: int) -> bool:
+    """Inclusive hour window; wraps past midnight when start > end (e.g. 22 -> 5)."""
+    return start <= hour <= end if start <= end else hour >= start or hour <= end
+
+
 def rule_signals(f: PaymentFacts) -> dict[str, float]:
     """Each rule as a 0..1 strength."""
     start, end = (
@@ -86,7 +93,7 @@ def rule_signals(f: PaymentFacts) -> dict[str, float]:
         "amount_spike": _clamp(math.log10(max(f.amount_vs_usual, 1.0)) / 2),
         # under 20% of balance -> 0, 80%+ -> 1
         "balance_share": _clamp((f.share_of_balance - 0.2) / 0.6),
-        "off_hours": 0.0 if start <= f.hour_ist <= end else 1.0,
+        "off_hours": 0.0 if _in_window(f.hour_ist, start, end) else 1.0,
         "young_payee_account": (
             0.0 if age is None else 1.0 if age < 30 else 0.5 if age < 180 else 0.0
         ),

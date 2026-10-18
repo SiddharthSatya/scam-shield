@@ -40,7 +40,8 @@ class Deps:
     def thresholds(self) -> Thresholds:
         s = self.settings
         return Thresholds(ask=s.ask_threshold, hold=s.hold_threshold,
-                          cooling_off=s.cooling_off_threshold)
+                          cooling_off=s.cooling_off_threshold,
+                          context_hold=s.context_hold_threshold)
 
 
 @dataclass(frozen=True)
@@ -93,9 +94,16 @@ def check_payment(
     return step, row
 
 
+class AlreadyDecided(RuntimeError):
+    """The context step for this check already ran. Stops a coached customer (or a
+    scammer) from resubmitting softer answers on the same token to flip a hold."""
+
+
 def submit_context(deps: Deps, token: str, ctx: ContextInput) -> tuple[FinalStep, dict[str, Any]]:
-    """Step 2. Raises tokens.InvalidToken if the token is bad or expired."""
+    """Step 2. Raises tokens.InvalidToken (bad/expired token) or AlreadyDecided (replay)."""
     p = tokens.verify(token, deps.settings.token_secret.get_secret_value())
+    if final_already_recorded(deps.bq, deps.settings.table("decisions"), p["check_id"]):
+        raise AlreadyDecided(p["check_id"])
     ctx = ctx.model_copy(update={"language": p["language"]})
     context = read_context(ctx, deps.gemini, deps.settings.gemini_model)
 
@@ -151,6 +159,24 @@ def _log_row(
         "red_flags": context.red_flags if context else [],
         "context_source": context.source if context else None,
     }
+
+
+def final_already_recorded(bq: bigquery.Client, table_id: str, check_id: str) -> bool:
+    """True if the decision log already has a final row for this check.
+
+    Fails open (returns False) if BigQuery is unreachable: a log outage must not block
+    payments. The log is written right after each response, so the replay window is the
+    second or so it takes that write to land.
+    """
+    sql = f"SELECT 1 FROM `{table_id}` WHERE check_id = @check_id AND stage = 'final' LIMIT 1"
+    config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("check_id", "STRING", check_id)])
+    try:
+        return next(iter(bq.query_and_wait(sql, job_config=config, wait_timeout=5.0)),
+                    None) is not None
+    except Exception:
+        log.exception("Replay check failed; allowing the context step")
+        return False
 
 
 def write_log(bq: bigquery.Client, table_id: str, row: dict[str, Any]) -> None:

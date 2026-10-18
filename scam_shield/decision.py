@@ -18,10 +18,13 @@ class Thresholds:
     ask: float
     hold: float
     cooling_off: float
+    context_hold: float = 0.85  # context score alone that triggers a hold
 
     def __post_init__(self) -> None:
         if not 0 <= self.ask <= self.hold <= 1 or not 0 <= self.cooling_off <= 1:
             raise ValueError("thresholds must satisfy 0 <= ask <= hold <= 1")
+        if not 0 <= self.context_hold <= 1:
+            raise ValueError("context_hold must be between 0 and 1")
 
 
 def combined_score(money: float, context: float) -> float:
@@ -41,4 +44,8 @@ def decide_after_context(money: float, context: float, t: Thresholds) -> Decisio
     """Second step: money + context. Never returns ASK."""
     if money >= t.cooling_off:
         return Decision.COOLING_OFF
-    return Decision.HOLD if combined_score(money, context) >= t.hold else Decision.PASS
+    # The customer's own answers can be enough: a near-certain scam story is held even when
+    # the money looks only slightly unusual.
+    if context >= t.context_hold or combined_score(money, context) >= t.hold:
+        return Decision.HOLD
+    return Decision.PASS

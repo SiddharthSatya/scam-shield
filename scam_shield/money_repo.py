@@ -62,6 +62,10 @@ class CustomerNotFound(LookupError):
     pass
 
 
+class AmountExceedsBalance(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class MoneyInputs:
     facts: PaymentFacts
@@ -92,6 +96,9 @@ def fetch_money_inputs(
 
     if row is None or row["balance_inr"] is None:
         raise CustomerNotFound(customer_id)
+
+    if amount_inr > row["balance_inr"]:
+        raise AmountExceedsBalance(customer_id)
 
     facts = PaymentFacts(
         amount_inr=amount_inr,

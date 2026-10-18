@@ -20,7 +20,9 @@ TOKEN_LIFETIME_S = 45 * 60  # Google ID tokens last 60 min; refresh early
 
 
 class ApiError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status  # None when the API could not be reached
 
 
 class _IdTokenCache:
@@ -72,7 +74,8 @@ class ScamShieldClient:
         except httpx.HTTPError as e:
             raise ApiError(f"Could not reach Scam Shield: {e}") from e
         if r.status_code >= 400:
-            raise ApiError(f"Scam Shield returned {r.status_code}: {r.text[:200]}")
+            raise ApiError(f"Scam Shield returned {r.status_code}: {r.text[:200]}",
+                           status=r.status_code)
         return r.json() if r.content else None
 
     def _post_expecting_body(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:

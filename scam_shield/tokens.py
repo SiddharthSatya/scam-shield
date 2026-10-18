@@ -41,12 +41,15 @@ def verify(token: str, secret: str, now: float | None = None) -> dict[str, Any]:
         body, signature = token.split(".")
     except ValueError as e:
         raise InvalidToken("malformed token") from e
-    if not hmac.compare_digest(signature, _sign(body, secret)):
+    # Compare bytes: compare_digest raises TypeError on non-ASCII str input.
+    if not hmac.compare_digest(signature.encode(), _sign(body, secret).encode()):
         raise InvalidToken("bad signature")
     try:
         payload = json.loads(_unb64(body))
     except ValueError as e:
         raise InvalidToken("malformed token") from e
-    if payload.get("exp", 0) < (time.time() if now is None else now):
+    if not isinstance(payload, dict) or not isinstance(payload.get("exp"), int | float):
+        raise InvalidToken("malformed token")
+    if payload["exp"] < (time.time() if now is None else now):
         raise InvalidToken("token expired")
     return payload
